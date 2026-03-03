@@ -21,6 +21,15 @@ php artisan test
 ./vendor/bin/phpunit --testdox
 ```
 
+## Testing
+
+This scaffold includes a lightweight local test runner so tests can run without external package downloads in restricted environments.
+
+```bash
+php artisan test
+./vendor/bin/phpunit --testdox
+```
+
 ## Tenant enforcement
 - `tenant.context` middleware resolves the authenticated user's `hospital_id` into `TenantContext`.
 - `BelongsToHospital` global scope enforces `where hospital_id = current tenant` automatically.
