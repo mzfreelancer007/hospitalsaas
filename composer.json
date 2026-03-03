@@ -1,0 +1,17 @@
+{
+  "name": "hospitalsaas/hms-scaffold",
+  "description": "Minimal HMS scaffold test harness",
+  "type": "project",
+  "require": {},
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit --testdox"
+  }
+}

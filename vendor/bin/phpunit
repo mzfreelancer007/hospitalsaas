@@ -1,0 +1,42 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../autoload.php';
+
+$testFiles = glob(__DIR__ . '/../../tests/Feature/*Test.php') ?: [];
+
+$total = 0;
+$failed = 0;
+
+foreach ($testFiles as $file) {
+    require_once $file;
+}
+
+foreach (get_declared_classes() as $class) {
+    if (!str_starts_with($class, 'Tests\\Feature\\')) {
+        continue;
+    }
+
+    $instance = new $class();
+    $methods = get_class_methods($instance) ?: [];
+
+    foreach ($methods as $method) {
+        if (!str_starts_with($method, 'test_')) {
+            continue;
+        }
+
+        $total++;
+        try {
+            $instance->$method();
+            echo "PASS {$class}::{$method}\n";
+        } catch (Throwable $e) {
+            $failed++;
+            fwrite(STDERR, "FAIL {$class}::{$method} - {$e->getMessage()}\n");
+        }
+    }
+}
+
+echo "\nTests: {$total}, Failures: {$failed}\n";
+exit($failed === 0 ? 0 : 1);
