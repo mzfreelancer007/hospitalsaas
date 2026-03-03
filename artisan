@@ -1,0 +1,168 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$root = __DIR__;
+$dbPath = $root . '/database/database.sqlite';
+
+function ensureDatabaseFile(string $dbPath): void
+{
+    $dir = dirname($dbPath);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0777, true);
+    }
+
+    if (!is_file($dbPath)) {
+        touch($dbPath);
+    }
+}
+
+function migrateSqlite(string $dbPath, bool $fresh = false): void
+{
+    ensureDatabaseFile($dbPath);
+
+    $pdo = new PDO('sqlite:' . $dbPath);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    if ($fresh) {
+        $tables = [
+            'appointments', 'doctors', 'departments', 'hospital_counters', 'patients',
+            'audit_logs', 'personal_access_tokens', 'role_user', 'permission_role',
+            'permissions', 'roles', 'users', 'hospitals',
+        ];
+
+        foreach ($tables as $table) {
+            $pdo->exec("DROP TABLE IF EXISTS {$table}");
+        }
+    }
+
+    $queries = [
+        'CREATE TABLE IF NOT EXISTS hospitals (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER, name TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS permission_role (permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, PRIMARY KEY(permission_id, role_id))',
+        'CREATE TABLE IF NOT EXISTS role_user (role_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY(role_id, user_id))',
+        'CREATE TABLE IF NOT EXISTS personal_access_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, tokenable_type TEXT NOT NULL, tokenable_id INTEGER NOT NULL, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, abilities TEXT, last_used_at TEXT, expires_at TEXT, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER, user_id INTEGER, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id INTEGER, payload TEXT, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER NOT NULL, patient_code TEXT NOT NULL UNIQUE, first_name TEXT NOT NULL, last_name TEXT NOT NULL, dob TEXT, gender TEXT, phone TEXT, address TEXT, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS hospital_counters (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER NOT NULL, key TEXT NOT NULL, value INTEGER NOT NULL DEFAULT 0, created_at TEXT, updated_at TEXT, UNIQUE(hospital_id, key))',
+        'CREATE TABLE IF NOT EXISTS departments (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER NOT NULL, name TEXT NOT NULL, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS doctors (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER NOT NULL, department_id INTEGER, first_name TEXT NOT NULL, last_name TEXT NOT NULL, specialty TEXT, phone TEXT, email TEXT, created_at TEXT, updated_at TEXT)',
+        'CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, hospital_id INTEGER NOT NULL, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT "scheduled", notes TEXT, created_at TEXT, updated_at TEXT)',
+    ];
+
+    foreach ($queries as $query) {
+        $pdo->exec($query);
+    }
+
+    echo "Migrations completed using SQLite: {$dbPath}\n";
+}
+
+function seedDatabase(string $dbPath): void
+{
+    ensureDatabaseFile($dbPath);
+
+    $pdo = new PDO('sqlite:' . $dbPath);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $pdo->exec('CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, created_at TEXT, updated_at TEXT)');
+
+    $permissions = [
+        ['Create users', 'users.create'],
+        ['View users', 'users.view'],
+        ['Update users', 'users.update'],
+        ['Change user status', 'users.status'],
+        ['Create patients', 'patients.create'],
+        ['View patients', 'patients.view'],
+        ['Update patients', 'patients.update'],
+        ['Manage departments', 'departments.manage'],
+        ['Manage doctors', 'doctors.manage'],
+        ['View doctors', 'doctors.view'],
+        ['Create appointments', 'appointments.create'],
+        ['View appointments', 'appointments.view'],
+        ['Update appointments', 'appointments.update'],
+    ];
+
+    $stmt = $pdo->prepare('INSERT INTO permissions (name, key, created_at, updated_at) VALUES (:name, :key, :created_at, :updated_at) ON CONFLICT(key) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at');
+    $now = date('c');
+
+    foreach ($permissions as [$name, $key]) {
+        $stmt->execute([
+            ':name' => $name,
+            ':key' => $key,
+            ':created_at' => $now,
+            ':updated_at' => $now,
+        ]);
+    }
+
+    echo "Database seeded: permissions upserted (" . count($permissions) . ")\n";
+}
+
+function runTests(string $root, array $args): int
+{
+    $phpunit = $root . '/vendor/bin/phpunit';
+
+    if (!is_file($phpunit)) {
+        fwrite(STDERR, "Test runner not found at vendor/bin/phpunit\n");
+        return 1;
+    }
+
+    $argString = implode(' ', array_map('escapeshellarg', $args));
+    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($phpunit) . ($argString ? ' ' . $argString : '');
+    passthru($cmd, $exitCode);
+
+    return (int) $exitCode;
+}
+
+function serveApp(string $root, array $args): int
+{
+    $host = '127.0.0.1';
+    $port = '8000';
+
+    foreach ($args as $index => $arg) {
+        if ($arg === '--host' && isset($args[$index + 1])) {
+            $host = $args[$index + 1];
+        }
+
+        if ($arg === '--port' && isset($args[$index + 1])) {
+            $port = $args[$index + 1];
+        }
+    }
+
+    $router = $root . '/public/index.php';
+    if (!is_file($router)) {
+        fwrite(STDERR, "Router not found at public/index.php\n");
+        return 1;
+    }
+
+    $cmd = sprintf('%s -S %s:%s %s', escapeshellarg(PHP_BINARY), escapeshellarg($host), escapeshellarg($port), escapeshellarg($router));
+    echo "Starting development server: http://{$host}:{$port}\n";
+    passthru($cmd, $exitCode);
+
+    return (int) $exitCode;
+}
+
+$command = $argv[1] ?? null;
+$args = array_slice($argv, 2);
+
+switch ($command) {
+    case 'migrate':
+        migrateSqlite($dbPath, in_array('--fresh', $args, true));
+        exit(0);
+
+    case 'db:seed':
+        seedDatabase($dbPath);
+        exit(0);
+
+    case 'test':
+        exit(runTests($root, $args));
+
+    case 'serve':
+        exit(serveApp($root, $args));
+
+    default:
+        fwrite(STDERR, "Supported commands: migrate [--fresh], db:seed, test, serve [--host <host>] [--port <port>]\n");
+        exit(1);
+}
