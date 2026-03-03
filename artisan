@@ -1,0 +1,25 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$command = $argv[1] ?? null;
+
+if ($command !== 'test') {
+    fwrite(STDERR, "Only the 'test' command is supported in this scaffold.\n");
+    exit(1);
+}
+
+$root = __DIR__;
+$phpunit = $root . '/vendor/bin/phpunit';
+
+if (!is_file($phpunit)) {
+    fwrite(STDERR, "Dependencies are not installed. Run: composer install\n");
+    exit(1);
+}
+
+$args = array_slice($argv, 2);
+$argString = implode(' ', array_map('escapeshellarg', $args));
+$cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($phpunit) . ($argString ? ' ' . $argString : '');
+passthru($cmd, $code);
+exit($code);

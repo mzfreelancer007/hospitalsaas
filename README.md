@@ -1,11 +1,24 @@
 # Multi-tenant HMS (Laravel-style scaffold)
 
+**Current version:** `0.1.0`
+
+This is the first release of the Hospital Management System API scaffold with multi-tenant data isolation by hospital.
+
 ## Run
 
 ```bash
 php artisan migrate
 php artisan db:seed
 php artisan serve
+```
+
+## Testing
+
+This scaffold includes a lightweight local test runner so tests can run without external package downloads in restricted environments.
+
+```bash
+php artisan test
+./vendor/bin/phpunit --testdox
 ```
 
 ## Tenant enforcement
