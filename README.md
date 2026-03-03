@@ -7,9 +7,18 @@ This is the first release of the Hospital Management System API scaffold with mu
 ## Run
 
 ```bash
-php artisan migrate
+php artisan migrate --fresh
 php artisan db:seed
-php artisan serve
+php artisan serve --host 127.0.0.1 --port 8000
+```
+
+## Testing
+
+This scaffold includes a lightweight local test runner so tests can run without external package downloads in restricted environments.
+
+```bash
+php artisan test
+./vendor/bin/phpunit --testdox
 ```
 
 ## Testing
@@ -35,3 +44,10 @@ php artisan test
 - Departments: `/api/v1/departments`
 - Doctors: `/api/v1/doctors`
 - Appointments: `/api/v1/appointments`
+
+
+## Scaffold artisan commands
+- `php artisan migrate [--fresh]` creates the local SQLite schema at `database/database.sqlite`.
+- `php artisan db:seed` upserts default permission records.
+- `php artisan test` runs the local test suite.
+- `php artisan serve [--host <host>] [--port <port>]` starts the built-in API server.
